@@ -1,120 +1,222 @@
+// Program.cs
 using System;
 using System.Collections.Generic;
-using System.IO;
-using System.Linq;
 
 class Program
 {
-    static void Main()
+    static void Main(string[] args)
     {
-        List<Scripture> scriptures = LoadScriptures("scriptures.txt");
-        Random random = new Random();
-        
-        // Pick a random scripture
-        Scripture scripture = scriptures[random.Next(scriptures.Count)];
+        // Create a scripture (you can change this to any scripture you want)
+        Reference reference = new Reference("John", 3, 16, 17);
+        string text = "For God so loved the world, that he gave his only begotten Son, that whosoever believeth in him should not perish, but have everlasting life. For God sent not his Son into the world to condemn the world; but that the world through him might be saved.";
+        Scripture scripture = new Scripture(reference, text);
 
-        while (!scripture.AllWordsHidden())
+        bool isFinished = false;
+
+        // Main program loop
+        while (!isFinished)
         {
+            // Clear console and display scripture
             Console.Clear();
             Console.WriteLine(scripture.GetDisplayText());
-            Console.WriteLine("\nPress Enter to hide words or type 'quit' to exit.");
-
-            string input = Console.ReadLine().Trim().ToLower();
-            if (input == "quit") break;
+            Console.WriteLine();
             
-            scripture.HideRandomWords(3); // Hide 3 words at a time
-        }
-
-        Console.Clear();
-        Console.WriteLine(scripture.GetDisplayText());
-        Console.WriteLine("\nAll words are hidden. Memorization complete!");
-    }
-
-    static List<Scripture> LoadScriptures(string filename)
-    {
-        List<Scripture> scriptures = new List<Scripture>();
-        if (File.Exists(filename))
-        {
-            string[] lines = File.ReadAllLines(filename);
-            foreach (string line in lines)
+            // Check if all words are hidden
+            if (scripture.IsCompletelyHidden())
             {
-                string[] parts = line.Split('|'); // Format: "Reference|Scripture text"
-                if (parts.Length == 2)
-                {
-                    scriptures.Add(new Scripture(new Reference(parts[0]), parts[1]));
-                }
+                Console.WriteLine("You've completely memorized the scripture!");
+                isFinished = true;
+                continue;
+            }
+
+            // Prompt user for input
+            Console.WriteLine("Press enter to continue or type 'quit' to exit:");
+            string userInput = Console.ReadLine();
+
+            // Check for quit command
+            if (userInput.ToLower() == "quit")
+            {
+                isFinished = true;
+            }
+            else
+            {
+                // Hide some random words
+                scripture.HideRandomWords(3);
             }
         }
-        return scriptures;
     }
 }
 
+// Reference.cs
 class Reference
 {
-    public string Book { get; }
-    public int StartVerse { get; }
-    public int? EndVerse { get; } // Nullable for single verses
+    private string _book;
+    private int _chapter;
+    private int _verse;
+    private int _endVerse;
 
-    public Reference(string reference)
+    // Constructor for a single verse reference
+    public Reference(string book, int chapter, int verse)
     {
-        string[] parts = reference.Split(' ');
-        Book = parts[0];
-        string[] verses = parts[1].Split('-');
-        StartVerse = int.Parse(verses[0]);
-        EndVerse = verses.Length > 1 ? int.Parse(verses[1]) : (int?)null;
+        _book = book;
+        _chapter = chapter;
+        _verse = verse;
+        _endVerse = verse; // Same as the start verse for single verse
     }
 
-    public override string ToString()
+    // Constructor for verse range reference
+    public Reference(string book, int chapter, int startVerse, int endVerse)
     {
-        return EndVerse.HasValue ? $"{Book} {StartVerse}-{EndVerse}" : $"{Book} {StartVerse}";
+        _book = book;
+        _chapter = chapter;
+        _verse = startVerse;
+        _endVerse = endVerse;
+    }
+
+    // Return formatted reference
+    public string GetDisplayText()
+    {
+        if (_verse == _endVerse)
+        {
+            return $"{_book} {_chapter}:{_verse}";
+        }
+        else
+        {
+            return $"{_book} {_chapter}:{_verse}-{_endVerse}";
+        }
     }
 }
 
-class Scripture
+// Word.cs
+class Word
 {
-    private Reference _reference;
-    private List<Word> _words;
-    private Random _random = new Random();
+    private string _text;
+    private bool _isHidden;
 
-    public Scripture(Reference reference, string text)
+    public Word(string text)
     {
-        _reference = reference;
-        _words = text.Split(' ').Select(word => new Word(word)).ToList();
+        _text = text;
+        _isHidden = false;
+    }
+
+    public void Hide()
+    {
+        _isHidden = true;
+    }
+
+    public bool IsHidden()
+    {
+        return _isHidden;
     }
 
     public string GetDisplayText()
     {
-        return $"{_reference}: {string.Join(" ", _words.Select(w => w.Display))}";
-    }
-
-    public void HideRandomWords(int count)
-    {
-        var visibleWords = _words.Where(w => !w.IsHidden).ToList();
-        if (visibleWords.Count == 0) return;
-
-        for (int i = 0; i < count && visibleWords.Count > 0; i++)
+        if (_isHidden)
         {
-            int index = _random.Next(visibleWords.Count);
-            visibleWords[index].Hide();
-            visibleWords.RemoveAt(index);
+            // Return underscores matching the length of the word
+            return new string('_', _text.Length);
+        }
+        else
+        {
+            return _text;
+        }
+    }
+}
+
+// Scripture.cs
+class Scripture
+{
+    private Reference _reference;
+    private List<Word> _words;
+
+    public Scripture(Reference reference, string text)
+    {
+        _reference = reference;
+        _words = new List<Word>();
+
+        // Split the text into words and create Word objects
+        string[] wordArray = text.Split(' ');
+        foreach (string wordText in wordArray)
+        {
+            _words.Add(new Word(wordText));
         }
     }
 
-    public bool AllWordsHidden() => _words.All(w => w.IsHidden);
-}
-
-class Word
-{
-    private string _original;
-    public bool IsHidden { get; private set; }
-    
-    public Word(string text)
+    public void HideRandomWords(int numberToHide)
     {
-        _original = text;
-        IsHidden = false;
+        // Stretch challenge: Only select from words that are not already hidden
+        Random random = new Random();
+        int hiddenCount = 0;
+        
+        // First, check if we have enough unhidden words left
+        int unhiddenWordsCount = _words.Count(w => !w.IsHidden());
+        int wordsToHide = Math.Min(numberToHide, unhiddenWordsCount);
+        
+        // Hide the words
+        while (hiddenCount < wordsToHide)
+        {
+            // Get a list of indices of unhidden words
+            List<int> unhiddenIndices = new List<int>();
+            for (int i = 0; i < _words.Count; i++)
+            {
+                if (!_words[i].IsHidden())
+                {
+                    unhiddenIndices.Add(i);
+                }
+            }
+            
+            // Get a random index from the unhidden words
+            int randomIndex = unhiddenIndices[random.Next(unhiddenIndices.Count)];
+            
+            // Hide the word if it's not already hidden
+            if (!_words[randomIndex].IsHidden())
+            {
+                _words[randomIndex].Hide();
+                hiddenCount++;
+            }
+        }
     }
 
-    public string Display => IsHidden ? new string('_', _original.Length) : _original;
+    public bool IsCompletelyHidden()
+    {
+        // Check if all words are hidden
+        foreach (Word word in _words)
+        {
+            if (!word.IsHidden())
+            {
+                return false;
+            }
+        }
+        return true;
+    }
 
-    public void Hide() => IsHidden = true;
+    public string GetDisplayText()
+    {
+        // Combine the reference and words into a display string
+        string displayText = _reference.GetDisplayText() + ": ";
+        
+        foreach (Word word in _words)
+        {
+            displayText += word.GetDisplayText() + " ";
+        }
+        
+        return displayText.Trim();
+    }
+}
+
+// Extension method for LINQ-like functionality without requiring System.Linq
+static class Extensions
+{
+    public static int Count<T>(this List<T> list, Func<T, bool> predicate)
+    {
+        int count = 0;
+        foreach (T item in list)
+        {
+            if (predicate(item))
+            {
+                count++;
+            }
+        }
+        return count;
+    }
 }
